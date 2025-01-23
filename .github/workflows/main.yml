@@ -16,7 +16,9 @@ jobs:
     - name: 📂 Sync files
       uses: SamKirkland/FTP-Deploy-Action@v4.3.5
       with:
-        server: http://66.85.139.234:2082/ #https://host.hostnavy.net:2083/
-        username: marketsp #${{ secrets.ftp_username }}
-        password: x3j7pE6t7E #${{ secrets.ftp_password }}
+        server: ftp.marketsprices.com 
+        username: ${{ secrets.ftp_username }}
+        password: ${{ secrets.ftp_password }}
+        # username: marketsp@marketsprices.com #${{ secrets.ftp_username }}
+        # password: B^6)W(?R$A*Y #${{ secrets.ftp_password }}
         server-dir: /File_Manager/
