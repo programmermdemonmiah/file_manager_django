@@ -2,39 +2,38 @@ from django.contrib.auth.hashers import check_password, make_password
 from django.http import JsonResponse
 from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
-from django.views import View
-from django.shortcuts import get_object_or_404
+from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated
 from api.models import User
-from api.serializers import UpdateUserInfoRequestSerializer
+from api.serializers import UpdateUserInfoRequestSerializer, UserSerializer
 import os
+from file_manager import PROFILE_IMAGE_UPLOAD_DIR
 
-IMAGE_UPLOAD_DIR = "media/profile_images/"
+class UserView(APIView):
+    permission_classes = [IsAuthenticated]  # Ensures the user is authenticated
 
-class UserView(View):
-
-    @staticmethod
-    def get_user_info(request):
+    def get(self, request):
+        """Get user information."""
         try:
-            user_id = request.GET.get('id')
-            user = get_object_or_404(User, id=user_id)
-
-            user_dict = user.__dict__
-            user_dict.pop("password", None)  # Exclude hashed_password field
+            user = request.user  
+            if not user.is_authenticated:
+                return JsonResponse({"error": "Authentication required"}, status=401)
             
-            return JsonResponse(user_dict, status=200)
+            serializer = UserSerializer(user)
+            print(serializer.data)
+            return JsonResponse(serializer.data, status=200, safe=False)
+        
         except Exception as e:
             return JsonResponse({"error": f"An unexpected error occurred: {str(e)}"}, status=500)
 
-    @staticmethod
-    def update_user_info(request):
+    def post(self, request):
+        """Update user information."""
         try:
-            if request.method != "POST":
-                return JsonResponse({"error": "Invalid HTTP method"}, status=405)
+            user = request.user  # Assuming authentication middleware is used
+            if not user.is_authenticated:
+                return JsonResponse({"error": "Authentication required"}, status=401)
 
-            token = request.user  # Assuming you use Django's authentication middleware
-            user = get_object_or_404(User, id=token.id)
-
-            data = request.POST.dict()
+            data = request.data  # Use DRF's request.data to handle both JSON and form-data
             serializer = UpdateUserInfoRequestSerializer(data=data)
             if not serializer.is_valid():
                 return JsonResponse(serializer.errors, status=400)
@@ -43,7 +42,7 @@ class UserView(View):
 
             # Ensure at least one field to update is provided
             if not any(user_req.values()):
-                return JsonResponse({"error": "Please provide at least one field to update"}, status=204)
+                return JsonResponse({"error": "Please provide at least one field to update"}, status=400)
 
             # Validate old password if updating password
             if 'password' in user_req or 'newpassword' in user_req:
@@ -55,14 +54,14 @@ class UserView(View):
             # Update email if provided
             if 'email' in user_req:
                 if User.objects.filter(email=user_req.get('email')).exists():
-                    return JsonResponse({"error": "This email is already in use"}, status=226)
+                    return JsonResponse({"error": "This email is already in use"}, status=400)
                 user.email = user_req.get('email')
 
             # Save the image if provided
             if 'image' in request.FILES:
                 image_file = request.FILES['image']
                 image_filename = f"{user.id}_profile_image.jpg"
-                image_path = os.path.join(IMAGE_UPLOAD_DIR, image_filename)
+                image_path = os.path.join(PROFILE_IMAGE_UPLOAD_DIR, image_filename)
                 default_storage.save(image_path, ContentFile(image_file.read()))
                 user.image = image_path
 
@@ -72,12 +71,11 @@ class UserView(View):
 
             user.save()
 
-            user_dict = user.__dict__
-            user_dict.pop("password", None)  # Exclude hashed_password field
-
+            # Use a serializer to serialize updated user data
+            user_serializer = UpdateUserInfoRequestSerializer(user)
             return JsonResponse({
                 "message": "User information updated successfully",
-                "user": user_dict
+                "user": user_serializer.data
             }, status=200)
         except Exception as e:
             return JsonResponse({"error": f"An unexpected error occurred: {str(e)}"}, status=500)
